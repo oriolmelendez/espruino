@@ -1,0 +1,225 @@
+<html>
+
+<head></head>
+
+<body>
+    <link rel="stylesheet" href="testPuckJs.css">
+    <script src="https://www.puck-js.com/puck.js"></script>
+    <script>
+        let l = true, d = true, r = true;
+
+        // Configura l'NFC per conectarse a una pagina web
+        function confNFC() {
+            Puck.write('NRF.nfcURL();\n');
+            let NFCT = document.getElementById('NFCText').value;
+            console.log(NFCT);
+            Puck.write('NRF.nfcURL("http://' + NFCT + '");\n');
+        }
+        // configuracio d'LDR segons els botons
+        function handleClick(id) {
+            switch (id) {
+                case 'L':
+                    // Esto se puede hacer en un if y creo que queda mejor 
+                    l ? Puck.write('LED1.set();\n') : Puck.write('LED1.reset();\n');
+                    l ? l = false : l = true;
+                    break;
+                case 'D':
+                    d ? Puck.write('LED2.set();\n') : Puck.write('LED2.reset();\n');
+                    d ? d = false : d = true;
+                    break;
+                case 'R':
+                    r ? Puck.write('LED3.set();\n') : Puck.write('LED3.reset();\n');
+                    r ? r = false : r = true;
+                    break;
+            }
+        }
+
+        // funcio per agafar les mesures
+        function getMeasures() {
+            modifyMeasures();
+            getTemp();
+        }
+
+        // functio per agafar la temperatura
+        function getTemp() {
+
+            let arrayTemp = new Map();
+
+            var opcions = {
+                enableHighAccuracy: true,
+                maximumAge: 30000,
+                timeout: 27000
+            };
+
+
+            Puck.write('E.getTemperature();\n', (callback) => {
+                console.log(callback);
+                let tempOK = callback.split('=')[1];
+                let res;
+                for (let i = 0; tempOK.length > i; i++) {
+                    let c = tempOK.charAt(i);
+                    console.log(c);
+                    if ((c < '0' || c > '9') && c != '.') {
+                        res = tempOK.slice(0, i + 1);
+                        console.log(res);
+                        break;
+                    }
+                }
+                if (localStorage.getItem("temps") !== null) {
+                    arrayTemp = new Map(JSON.parse(localStorage.getItem('temps')));
+                    console.log(arrayTemp.keys);
+                }
+
+                var today = new Date();
+
+                var time = today.getFullYear() + (today.getMonth() + 1) + today.getDate() + today.getHours() + today.getMinutes() + today.getSeconds();
+
+                arrayTemp.set(time, res);
+
+                localStorage.setItem('temps', JSON.stringify([...arrayTemp]));
+                let setMeasure = new Set([...arrayTemp.values()]);
+                let arrayMeas = Array.from(setMeasure);
+                console.log(arrayTemp.values());
+                console.log(arrayMeas);
+                function comparar(a, b) { return a - b; }
+                arrayMeas.sort(comparar);
+                var long, lat;
+                navigator.geolocation.getCurrentPosition(function (posicio) {
+                    long = posicio.coords.longitude;
+                    lat = posicio.coords.latitude;
+                    var finale = new Array();
+                    arrayMeas.forEach(element => {
+                        finale.push(element + 'ºC') 
+                    });
+                    console.log(finale);
+                    console.log(arrayMeas);
+                    document.getElementById('mesures').innerHTML = "Nivell de Temperatura enregistrat: " + finale;
+                    document.getElementById('mesuresAct').innerHTML = "Nivell de Temperatura actual: " + res + " a la latitud " + lat + "º i longitud " + long+"º";
+                }, function (err) {
+                    alert("problemes amb geolocalització " + err.message);
+                }, opcions);
+            });
+
+        }
+
+        // funcio per agafar l'LDR
+        function getLDR() {
+            let arrayTemp = new Array();
+            Puck.write('Puck.light();\n', (callback) => {
+                console.log(callback);
+                let tempOK = callback.split('=')[1];
+                let res;
+                for (let i = 0; tempOK.length > i; i++) {
+                    let c = tempOK.charAt(i);
+                    console.log(c);
+                    if ((c < '0' || c > '9') && c != '.') {
+                        res = tempOK.slice(0, i + 1);
+                        console.log(res);
+                        break;
+                    }
+                }
+                if (localStorage.getItem("light") !== null) {
+                    arrayTemp = localStorage.getItem('light').split(" ");;
+                }
+                if (arrayTemp.length > 10) {
+                    arrayTemp.pop();
+                }
+                res = parseFloat(res * 100).toFixed(2);;
+                console.log(res);
+                arrayTemp.push(res);
+                localStorage.setItem('light', arrayTemp);
+
+                function comparar(a, b) { return a - b; }
+                arrayTemp.sort(comparar);
+                document.getElementById('mesures').innerHTML = "Nivell de LDR enregistrat: " + arrayTemp;
+                document.getElementById('mesuresAct').innerHTML = "Nivell de LDR actual: " + res;
+            });
+
+        }
+
+        // funcio per filtrar la temperatura amb l'imput de l'usuari
+        function filtraTemp(){
+            let arrayTemp = new Map();
+            arrayTemp = new Map(JSON.parse(localStorage.getItem('temps')));
+            let arrayDisp = Array.from(arrayTemp.values());
+            let n = document.getElementById("tempFilter").value;
+            document.getElementById('tempFilterRes').innerHTML = "Nivell de Temperatura enregistrat: " + arrayDisp.filter(word => word > n);
+        }
+
+        // funcio dinamica per agafar les mesures LDR o Temperatura segons vulgui l'usuari
+        function modifyMeasures() {
+            let checks = document.querySelector('input[name="measure"]:checked').value;
+            if (checks == "tmp") {
+                getMeasures = function () {
+                    getTemp();
+                }
+            } else {
+                getMeasures = function () {
+                    getLDR();
+                }
+            }
+            getMeasures();
+        }
+
+        setInterval(getMeasures(), 10000);
+    </script>
+    <label>Configura per anar a una pagina web: </label>
+    <input type="text" id="NFCText">
+    <button onclick="confNFC();">Engrave</button>
+    <br>
+    <br>
+    <br>
+    <label>R</label>
+    <label class="switch">
+        <input type="checkbox" id="L" onclick='handleClick(this.id);'>>
+        <span class="slider round"></span>
+    </label>
+    <br>
+    <label>G</label>
+    <label class="switch">
+        <input type="checkbox" id="D" onclick='handleClick(this.id);'>
+        <span class="slider round"></span>
+    </label>
+    <br>
+    <label>B</label>
+    <label class="switch">
+        <input type="checkbox" id="R" onclick='handleClick(this.id);'>
+        <span class="slider round"></span>
+    </label>
+    <br>
+    <br>
+    <label id="temp"></label>
+    <br>
+    <label id="light"></label>
+    <br>
+    <button onclick="getMeasures()">Get Measures</button>
+    <br>
+    <br>
+    <br>
+    <div>
+        <input type="radio" id="LDR" name="measure" onclick="modifyMeasures();" value="LDR">
+        <label for="LDR">LDR</label>
+    </div>
+    <div>
+        <input type="radio" id="tmp" name="measure" onclick="modifyMeasures();" value="tmp" checked>
+        <label for="tmp">Temperature</label>
+    </div>
+
+    <br>
+
+    <label id="mesures"></label>
+    <br>
+    <label id="mesuresAct"></label>
+    <br>
+    <br>
+    <br>
+    <div>
+        <label>Filtra la temperatura </label>
+        <input type="text" id="tempFilter">
+        <button onclick="filtraTemp();">Filtra</button>
+        <br>
+        <label id="tempFilterRes"></label>
+    </div>
+</body>
+
+</html>
